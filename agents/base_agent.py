@@ -1,9 +1,10 @@
+import time
 import anthropic
 from typing import Optional
 
 
 class BaseAgent:
-    """Base class for all specialized agents."""
+    """Base class for simple (no-tool) specialized agents."""
 
     def __init__(
         self,
@@ -26,25 +27,40 @@ class BaseAgent:
         if self.verbose:
             print(f"  [{self.name}] {message}")
 
-    def run(self, task: str, context: Optional[str] = None) -> str:
-        """Run a task and return the agent's response."""
-        self._log(f"Working on: {task[:80]}...")
+    def run(self, task: str, context: Optional[str] = None, retries: int = 3) -> str:
+        from utils.cost import get_tracker
 
+        self._log(f"Working on: {task[:80]}...")
         content = f"Context:\n{context}\n\nTask:\n{task}" if context else task
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": self.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": content}],
-        )
+        for attempt in range(retries):
+            try:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=[
+                        {
+                            "type": "text",
+                            "text": self.system_prompt,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                    messages=[{"role": "user", "content": content}],
+                )
+                get_tracker().add(response, self.model)
+                self._log("Done.")
+                return response.content[0].text
 
-        result = response.content[0].text
-        self._log("Done.")
-        return result
+            except anthropic.RateLimitError:
+                wait = 2 ** attempt
+                self._log(f"Rate limit hit — retrying in {wait}s...")
+                time.sleep(wait)
+            except anthropic.APIStatusError as e:
+                if attempt < retries - 1:
+                    wait = 2 ** attempt
+                    self._log(f"API error ({e.status_code}) — retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    return f"Error after {retries} attempts: {e}"
+
+        return "Error: all retry attempts exhausted."

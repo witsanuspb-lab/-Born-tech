@@ -37,4 +37,6 @@ def build_team(config: Config | None = None) -> Orchestrator:
         agents=agents,
         model=config.orchestrator_model,
         verbose=config.verbose,
+        maintain_history=config.maintain_history,
+        max_retries=config.max_retries,
     )

@@ -1,4 +1,5 @@
 from .base_agent import BaseAgent
+from .tool_agent import ToolAgent
 from .orchestrator import Orchestrator
 from .planner import PlannerAgent
 from .researcher import ResearcherAgent
@@ -12,6 +13,7 @@ from .summarizer import SummarizerAgent
 
 __all__ = [
     "BaseAgent",
+    "ToolAgent",
     "Orchestrator",
     "PlannerAgent",
     "ResearcherAgent",

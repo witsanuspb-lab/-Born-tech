@@ -16,9 +16,22 @@ The Orchestrator never hardcodes a workflow. Claude reasons about the task and c
 
 ---
 
+## Two Agent Base Classes
+
+| Base class | When to use | Inner loop? |
+|-----------|-------------|-------------|
+| `BaseAgent` | Agent needs no tools — single Claude call per task | No |
+| `ToolAgent` | Agent needs tools (web search, file I/O, code execution, etc.) | Yes — loops until `end_turn` |
+
+`ToolAgent` extends `BaseAgent`. Override `_dispatch_tool(name, input) -> str` to handle each tool call. See `agents/researcher.py`, `agents/writer.py`, `agents/developer.py` for examples.
+
+---
+
 ## Adding a New Agent
 
 ### Step 1 — Create `agents/<name>.py`
+
+**Simple agent (no tools):**
 
 ```python
 from .base_agent import BaseAgent
@@ -42,6 +55,25 @@ class <Name>Agent(BaseAgent):
             model=model,
             verbose=verbose,
         )
+```
+
+**Agent with tools** — extend `ToolAgent` instead:
+
+```python
+from .tool_agent import ToolAgent
+from tools.my_tool import my_function
+
+class MyAgent(ToolAgent):
+    def __init__(self, model="claude-sonnet-4-6", verbose=True):
+        super().__init__(
+            name="MyAgent", role="...", system_prompt=SYSTEM_PROMPT,
+            tools=[MY_TOOL_DEFINITION], model=model, verbose=verbose,
+        )
+
+    def _dispatch_tool(self, tool_name: str, tool_input: dict) -> str:
+        if tool_name == "my_tool":
+            return my_function(tool_input["param"])
+        return f"Unknown tool: {tool_name}"
 ```
 
 ### Step 2 — Register in `agents/__init__.py`
@@ -91,17 +123,13 @@ Add a row to the team table in `SYSTEM_PROMPT` inside `agents/orchestrator.py`:
 
 ## Adding Tools to an Agent
 
-Use `DeveloperAgent` (`agents/developer.py`) as the template — it's the only agent with its own inner tool-use loop.
-
-### Pattern for a tool-enabled agent
+Extend `ToolAgent` — it handles the inner loop automatically. You only implement `_dispatch_tool`.
 
 ```python
-import anthropic
-from typing import Optional
-
+# 1. Define the tool schema
 MY_TOOL = {
-    "name": "tool_name",
-    "description": "What this tool does",
+    "name": "my_tool",
+    "description": "One-sentence description for Claude",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -111,51 +139,21 @@ MY_TOOL = {
     },
 }
 
+# 2. Extend ToolAgent
+class MyAgent(ToolAgent):
+    def __init__(self, model="claude-sonnet-4-6", verbose=True):
+        super().__init__(
+            name="...", role="...", system_prompt=SYSTEM_PROMPT,
+            tools=[MY_TOOL], model=model, verbose=verbose,
+        )
 
-class MyAgent:
-    def __init__(self, model: str = "claude-sonnet-4-6", verbose: bool = True):
-        self.name = "MyAgent"
-        self.model = model
-        self.verbose = verbose
-        self.client = anthropic.Anthropic()
-
-    def _log(self, msg: str) -> None:
-        if self.verbose:
-            print(f"  [{self.name}] {msg}")
-
-    def run(self, task: str, context: Optional[str] = None) -> str:
-        content = f"Context:\n{context}\n\nTask:\n{task}" if context else task
-        messages = [{"role": "user", "content": content}]
-
-        while True:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=[{"type": "text", "text": SYSTEM_PROMPT,
-                          "cache_control": {"type": "ephemeral"}}],
-                tools=[MY_TOOL],
-                messages=messages,
-            )
-
-            if response.stop_reason == "end_turn":
-                return "".join(b.text for b in response.content if hasattr(b, "text"))
-
-            messages.append({"role": "assistant", "content": response.content})
-
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use" and block.name == "tool_name":
-                    result = my_tool_implementation(block.input["param"])
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": str(result),
-                    })
-
-            messages.append({"role": "user", "content": tool_results})
+    def _dispatch_tool(self, tool_name: str, tool_input: dict) -> str:
+        if tool_name == "my_tool":
+            return str(my_function(tool_input["param"]))
+        return f"Unknown tool: {tool_name}"
 ```
 
-> **Important:** Always handle `stop_reason == "end_turn"` as the exit condition. Never break on a fixed number of iterations.
+> The `ToolAgent.run()` loop exits on `stop_reason == "end_turn"`. Cost tracking is automatic.
 
 ---
 
@@ -203,14 +201,17 @@ This is applied in both `BaseAgent.run()` and every standalone agent. Do not rem
 ## Config Reference
 
 ```python
-# config.py
 @dataclass
 class Config:
     api_key: str               # from ANTHROPIC_API_KEY env var
     orchestrator_model: str    # model for Orchestrator (default: claude-sonnet-4-6)
     agent_model: str           # model for all 9 specialized agents (default: claude-sonnet-4-6)
     max_tokens: int            # max output tokens per call (default: 4096)
-    verbose: bool              # print dispatch logs to stdout (default: True)
+    verbose: bool              # print dispatch logs (default: True)
+    maintain_history: bool     # chat mode — remember turns (default: False)
+    save_output: bool          # auto-save results to output/ (default: False)
+    show_cost: bool            # print token + cost summary (default: True)
+    max_retries: int           # API retry attempts on rate limit / error (default: 3)
 ```
 
 **Model selection guide:**
@@ -267,30 +268,68 @@ Currently used only by `DeveloperAgent`. To give another agent Python execution,
 
 ```
 agents/
-  base_agent.py      BaseAgent — all simple agents inherit from this
-  orchestrator.py    Orchestrator + AGENT_TOOLS list (edit both when adding agents)
-  developer.py       Standalone tool-use agent (template for agents with tools)
-  planner.py         }
-  researcher.py      }
-  writer.py          }  All extend BaseAgent — only SYSTEM_PROMPT differs
-  reviewer.py        }
-  analyst.py         }
-  qa_tester.py       }
-  critic.py          }
-  summarizer.py      }
+  base_agent.py      BaseAgent — simple single-call agents; retry + cost tracking built in
+  tool_agent.py      ToolAgent(BaseAgent) — inner tool-use loop; override _dispatch_tool()
+  orchestrator.py    Orchestrator + AGENT_TOOLS (edit both when adding agents)
+  developer.py       ToolAgent — execute_python, file tools, run_shell
+  researcher.py      ToolAgent — web_search, fetch_webpage
+  writer.py          ToolAgent — write_file
+  planner.py  reviewer.py  analyst.py  qa_tester.py  critic.py  summarizer.py
+               └── All extend BaseAgent (no tools)
 tools/
-  code_executor.py   subprocess sandbox for Python execution
+  code_executor.py   subprocess Python sandbox
+  file_tools.py      read_file, write_file, append_file, list_directory
+  web_tools.py       web_search (DuckDuckGo), fetch_webpage
+  shell_tools.py     run_shell (blocked: rm, kill, sudo, etc.)
+utils/
+  cost.py            CostTracker singleton — get_tracker(), reset_tracker()
+  logger.py          SessionLogger — saves to output/session_<timestamp>.md
+output/              Auto-created; holds session markdown files
 team.py              build_team(config) — single assembly point
 config.py            Config dataclass
-main.py              CLI entry point (interactive + single-task argv)
+main.py              CLI — flags: --chat, --save, --quiet, --model, --no-cost
+```
+
+---
+
+## Parallel Execution
+
+When the Orchestrator's Claude response contains multiple `tool_use` blocks in a single turn, they are dispatched concurrently via `ThreadPoolExecutor`. No code changes needed — this is automatic. Design agent tasks to be independent when possible so Claude can parallelize them.
+
+---
+
+## Cost Tracking
+
+All `BaseAgent.run()` and `ToolAgent.run()` calls automatically register with the singleton `CostTracker`:
+
+```python
+from utils.cost import get_tracker, reset_tracker
+
+reset_tracker()          # clear counts before a task
+result = team.run(task)
+print(get_tracker().summary())   # "Calls: 5 | In: 12,400 | Out: 3,200 | ..."
+```
+
+Pricing table is in `utils/cost.py` (`_PRICING`). Update it if models or prices change.
+
+---
+
+## Session Logging
+
+```python
+from utils.logger import SessionLogger
+
+logger = SessionLogger("output")   # creates output/session_YYYY-MM-DD_HH-MM-SS.md
+logger.log(task, result)           # appends task + result
+logger.finalize(cost_summary)      # writes footer with timestamp + cost
 ```
 
 ---
 
 ## Checklist: Adding an Agent
 
-- [ ] `agents/<name>.py` — class extending `BaseAgent`, `SYSTEM_PROMPT` defined
+- [ ] `agents/<name>.py` — class extending `BaseAgent` or `ToolAgent`, `SYSTEM_PROMPT` defined
 - [ ] `agents/__init__.py` — import added, name in `__all__`
-- [ ] `team.py` — agent instance added to `agents` dict with correct key
+- [ ] `team.py` — agent instance in `agents` dict with correct string key
 - [ ] `agents/orchestrator.py` — `AGENT_TOOLS` entry added (`call_<key>`)
 - [ ] `agents/orchestrator.py` — team table row added to `SYSTEM_PROMPT`

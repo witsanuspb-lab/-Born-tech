@@ -16,6 +16,18 @@ python main.py
 
 # Run with a single task
 python main.py "Write a Python function to parse CSV files and summarize the data"
+
+# Chat mode (remembers history across turns)
+python main.py --chat
+
+# Save all results to output/
+python main.py --save
+
+# Quiet mode (no dispatch logs) + custom model
+python main.py --quiet --model claude-opus-4-8
+
+# Show all flags
+python main.py --help
 ```
 
 ## Architecture
@@ -24,11 +36,11 @@ This is a **10-agent hierarchical AI system** built with the Anthropic SDK (Pyth
 
 ```
 User
- └── Orchestrator  (tool-use agentic loop)
+ └── Orchestrator  (tool-use agentic loop, parallel dispatch)
       ├── Planner
-      ├── Researcher
-      ├── Writer
-      ├── Developer   ← has execute_python tool (subprocess sandbox)
+      ├── Researcher  ← web_search + fetch_webpage tools
+      ├── Writer      ← write_file tool
+      ├── Developer   ← execute_python + file tools + run_shell
       ├── Reviewer
       ├── Analyst
       ├── QA Tester
@@ -38,26 +50,42 @@ User
 
 ### How the Orchestrator works
 
-`agents/orchestrator.py` runs an **agentic loop**: it calls Claude with 9 tool definitions (one per agent). Claude decides which agents to call and in what order, passing results as `tool_result` blocks. The loop exits when `stop_reason == "end_turn"` and Claude synthesizes a final answer. This is the standard Anthropic tool-use pattern.
+`agents/orchestrator.py` runs an **agentic loop**: it calls Claude with 9 tool definitions (one per agent). Claude decides which agents to call and in what order, passing results as `tool_result` blocks. The loop exits when `stop_reason == "end_turn"`. When Claude issues multiple tool calls in the same response, the Orchestrator runs them **in parallel** via `ThreadPoolExecutor`.
 
 ### Agent design pattern
 
-All agents except `DeveloperAgent` extend `BaseAgent` (`agents/base_agent.py`), which:
-- Uses **prompt caching** (`cache_control: ephemeral`) on every system prompt to reduce latency and cost on repeated calls.
-- Accepts an optional `context` string (prior agent output) concatenated before the task.
+- **`BaseAgent`** (`agents/base_agent.py`) — simple single-call agents. Extend this for agents that don't need tools. Includes retry logic and cost tracking.
+- **`ToolAgent`** (`agents/tool_agent.py`) — extends `BaseAgent` with an inner tool-use loop. Used by `ResearcherAgent`, `WriterAgent`, and `DeveloperAgent`. Override `_dispatch_tool(name, input)` to handle tool calls.
 
-`DeveloperAgent` is standalone — it has its own tool-use loop with an `execute_python` tool that runs code in a subprocess via `tools/code_executor.py`.
+All agents use **prompt caching** (`cache_control: ephemeral`) on system prompts.
 
 ### Entry points
 
 | File | Purpose |
 |------|---------|
-| `main.py` | CLI — interactive loop or single-task via argv |
+| `main.py` | CLI — interactive, single-task, and chat modes |
 | `team.py` | `build_team(config)` — assembles all agents into an Orchestrator |
-| `config.py` | Dataclass for model names, token limits, verbosity |
+| `config.py` | Dataclass for models, verbosity, history, save, cost display |
+
+### Tools available to agents
+
+| Tool | File | Used by |
+|------|------|---------|
+| `execute_python` | `tools/code_executor.py` | Developer |
+| `read_file`, `write_file`, `append_file`, `list_directory` | `tools/file_tools.py` | Developer, Writer |
+| `web_search`, `fetch_webpage` | `tools/web_tools.py` | Researcher |
+| `run_shell` | `tools/shell_tools.py` | Developer |
+
+### Utilities
+
+| Module | Purpose |
+|--------|---------|
+| `utils/cost.py` | Token usage + estimated USD cost tracker (singleton via `get_tracker()`) |
+| `utils/logger.py` | Saves session Q&A to `output/session_<timestamp>.md` |
 
 ### Key conventions
 
-- `Config.agent_model` controls the model for all 9 specialized agents; `Config.orchestrator_model` controls the Orchestrator separately.
-- Verbose mode (`Config.verbose = True`) prints each agent dispatch step to stdout so you can trace execution.
-- To add a new agent: subclass `BaseAgent`, add an instance to `team.py`'s `agents` dict, and add a `call_<name>` tool definition in `agents/orchestrator.py`'s `AGENT_TOOLS` list and update the Orchestrator's system prompt table.
+- `Config.agent_model` controls all 9 specialized agents; `Config.orchestrator_model` controls the Orchestrator.
+- `Config.maintain_history = True` enables chat mode — the Orchestrator retains conversation across `run()` calls.
+- To add a new agent: see `SKILL.md` for the complete 5-step checklist.
+- Verbose mode (`Config.verbose = True`) prints each dispatch step so you can trace execution.

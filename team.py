@@ -1,4 +1,5 @@
 from config import Config
+from memory.store import MemoryStore
 from agents import (
     Orchestrator,
     PlannerAgent,
@@ -13,7 +14,7 @@ from agents import (
 )
 
 
-def build_team(config: Config | None = None) -> Orchestrator:
+def build_team(config: Config | None = None, memory: MemoryStore | None = None) -> Orchestrator:
     """Assemble and return the full 10-agent team with the Orchestrator as head."""
     if config is None:
         config = Config()
@@ -33,10 +34,13 @@ def build_team(config: Config | None = None) -> Orchestrator:
         "summarizer": SummarizerAgent(model=m, verbose=v),
     }
 
+    store = memory if memory is not None else MemoryStore()
+
     return Orchestrator(
         agents=agents,
         model=config.orchestrator_model,
         verbose=config.verbose,
         maintain_history=config.maintain_history,
         max_retries=config.max_retries,
+        memory=store,
     )

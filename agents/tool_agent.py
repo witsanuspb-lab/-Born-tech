@@ -27,7 +27,7 @@ class ToolAgent(BaseAgent):
 
     def _dispatch_tool(self, tool_name: str, tool_input: dict) -> str:
         """Override in subclasses to handle tool calls."""
-        raise NotImplementedError(f"No handler for tool '{tool_name}'")
+        return f"Unknown tool: {tool_name}"
 
     def run(self, task: str, context: Optional[str] = None) -> str:
         from utils.cost import get_tracker
@@ -68,11 +68,7 @@ class ToolAgent(BaseAgent):
                 self._log(f"Using tool: {block.name}")
                 output = self._dispatch_tool(block.name, block.input)
                 tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": output,
-                    }
+                    {"type": "tool_result", "tool_use_id": block.id, "content": output}
                 )
 
             messages.append({"role": "user", "content": tool_results})

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Team — 10-Agent System</title>
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --card:     #21262d;
+      --border:   #30363d;
+      --accent:   #58a6ff;
+      --accent2:  #3fb950;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --danger:   #f85149;
+      --warn:     #d29922;
+      --radius:   10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 52px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .logo { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: -.3px; }
+    .logo span { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .cost-pill {
+      font-size: 11px; color: var(--muted); background: var(--card);
+      padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border);
+    }
+    .chat-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted); cursor: pointer;
+    }
+    .chat-toggle input { cursor: pointer; accent-color: var(--accent); }
+    .icon-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      transition: all .15s;
+    }
+    .icon-btn:hover { background: var(--card); color: var(--text); }
+
+    /* ── Layout ── */
+    .layout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    aside {
+      width: 240px; background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; flex-shrink: 0;
+    }
+    .sidebar-section {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted); margin-bottom: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .add-btn {
+      background: var(--accent); color: #fff; border: none;
+      width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
+      font-size: 14px; line-height: 18px; text-align: center; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .memory-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .memory-item {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 8px 10px; margin-bottom: 6px; cursor: default; position: relative;
+    }
+    .memory-key { font-weight: 600; font-size: 12px; color: var(--accent); margin-bottom: 2px; }
+    .memory-val { font-size: 11px; color: var(--muted); overflow: hidden;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .del-btn {
+      position: absolute; top: 6px; right: 6px; background: none; border: none;
+      color: var(--danger); cursor: pointer; font-size: 13px; opacity: 0; transition: opacity .15s;
+    }
+    .memory-item:hover .del-btn { opacity: 1; }
+    .add-memory-form { padding: 10px 8px; border-top: 1px solid var(--border); background: var(--surface); }
+    .add-memory-form input,
+    .add-memory-form textarea {
+      width: 100%; background: var(--card); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px;
+      margin-bottom: 6px; resize: none; font-family: inherit; outline: none;
+    }
+    .add-memory-form input:focus,
+    .add-memory-form textarea:focus { border-color: var(--accent); }
+    .btn-row { display: flex; gap: 6px; }
+    .btn-row button {
+      flex: 1; padding: 5px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-weight: 600; border: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-cancel { background: var(--card); color: var(--muted); border: 1px solid var(--border) !important; }
+
+    /* ── Agents list in sidebar ── */
+    .agent-list { padding: 8px; overflow-y: auto; }
+    .agent-chip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-radius: 6px; margin-bottom: 3px; font-size: 12px;
+    }
+    .agent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Main chat ── */
+    .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .messages { flex: 1; overflow-y: auto; padding: 24px; scroll-behavior: smooth; }
+    .messages::-webkit-scrollbar { width: 6px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Welcome ── */
+    .welcome { text-align: center; padding: 60px 20px; max-width: 560px; margin: 0 auto; }
+    .welcome h2 { font-size: 24px; margin-bottom: 8px; }
+    .welcome p { color: var(--muted); margin-bottom: 28px; }
+    .example-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .example-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 12px 14px; border-radius: var(--radius); cursor: pointer;
+      text-align: left; font-size: 12px; line-height: 1.4; transition: all .15s;
+    }
+    .example-btn:hover { border-color: var(--accent); background: #21262d; }
+
+    /* ── Messages ── */
+    .msg { margin-bottom: 20px; max-width: 820px; }
+    .msg.user { margin-left: auto; }
+    .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+    .msg-header .avatar {
+      width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .avatar.user-av { background: #553098; }
+    .avatar.ai-av   { background: #1f6feb; }
+
+    .msg-body {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 18px; line-height: 1.65;
+    }
+    .msg.user .msg-body { background: #1a2f5a; border-color: #1f6feb55; }
+
+    /* Markdown inside msg-body */
+    .msg-body h1, .msg-body h2, .msg-body h3 { margin: 14px 0 6px; font-size: 1em; }
+    .msg-body h1 { font-size: 1.15em; }
+    .msg-body p  { margin-bottom: 10px; }
+    .msg-body p:last-child { margin-bottom: 0; }
+    .msg-body ul, .msg-body ol { padding-left: 20px; margin-bottom: 10px; }
+    .msg-body li { margin-bottom: 4px; }
+    .msg-body pre { border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+    .msg-body code:not(pre code) {
+      background: #161b22; padding: 2px 5px; border-radius: 4px;
+      font-size: 0.88em; font-family: "SF Mono", Consolas, monospace;
+    }
+    .msg-body table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+    .msg-body th, .msg-body td { border: 1px solid var(--border); padding: 6px 10px; }
+    .msg-body th { background: var(--surface); }
+    .msg-body blockquote {
+      border-left: 3px solid var(--accent); padding-left: 12px;
+      color: var(--muted); margin: 8px 0;
+    }
+
+    /* Trace */
+    .trace-toggle {
+      margin-top: 8px; font-size: 11px; color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; gap: 4px; user-select: none;
+    }
+    .trace-toggle:hover { color: var(--text); }
+    .trace-list { margin-top: 6px; padding: 8px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px; display: none; }
+    .trace-list.open { display: block; }
+    .trace-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0;
+      font-size: 11px; color: var(--muted); }
+    .trace-agent { color: var(--accent2); font-weight: 600; width: 90px; flex-shrink: 0; }
+    .trace-task  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Thinking animation */
+    .thinking-dots span {
+      animation: blink 1.4s infinite both;
+      display: inline-block; width: 6px; height: 6px; background: var(--accent);
+      border-radius: 50%; margin: 0 2px;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: .2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%, 80%, 100% { transform: scale(0); opacity: .5; } 40% { transform: scale(1); opacity: 1; } }
+
+    /* ── Input area ── */
+    .input-area {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .input-wrapper {
+      display: flex; gap: 10px; align-items: flex-end;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 14px; transition: border-color .15s;
+    }
+    .input-wrapper:focus-within { border-color: var(--accent); }
+    #taskInput {
+      flex: 1; background: none; border: none; color: var(--text);
+      font-family: inherit; font-size: 14px; line-height: 1.5;
+      resize: none; outline: none; max-height: 180px; overflow-y: auto;
+    }
+    #taskInput::placeholder { color: var(--muted); }
+    .send-btn {
+      background: var(--accent); color: #fff; border: none;
+      width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+      font-size: 16px; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .15s;
+    }
+    .send-btn:hover  { background: #79b8ff; }
+    .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+    .input-hint { font-size: 11px; color: var(--muted); margin-top: 6px; text-align: right; }
+
+    /* ── Error ── */
+    .error-msg .msg-body { background: #2d1015; border-color: var(--danger); color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div style="display:flex;align-items:center;gap:14px">
+    <span class="logo">⚡ AI Team <span>10-Agent System</span></span>
+  </div>
+  <div class="header-right">
+    <span class="cost-pill" id="costPill">—</span>
+    <label class="chat-toggle">
+      <input type="checkbox" id="chatToggle" /> Chat mode
+    </label>
+    <button class="icon-btn" onclick="clearHistory()">🗑 Clear</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside>
+    <!-- Agents -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Agents</div>
+      <div class="agent-list" id="agentList"></div>
+    </div>
+
+    <!-- Memory -->
+    <div class="sidebar-section" style="flex:0 0 auto">
+      <div class="sidebar-title">
+        Memory
+        <button class="add-btn" onclick="toggleAddMemory()" title="Add memory">+</button>
+      </div>
+    </div>
+    <div class="memory-list" id="memoryList">
+      <p style="font-size:11px;color:var(--muted);padding:6px 4px">No memories yet.</p>
+    </div>
+    <div class="add-memory-form" id="addMemoryForm" style="display:none">
+      <input type="text" id="memKey" placeholder="key (e.g. user_name)" />
+      <textarea id="memValue" placeholder="value to remember" rows="2"></textarea>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="saveMemory()">Save</button>
+        <button class="btn-cancel" onclick="toggleAddMemory()">Cancel</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main chat -->
+  <main class="chat-main">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <h2>What can I help you with?</h2>
+        <p>A team of 10 specialized AI agents — ask anything.</p>
+        <div class="example-grid">
+          <button class="example-btn" onclick="useExample(this)">Analyze pros and cons of microservices vs monolith</button>
+          <button class="example-btn" onclick="useExample(this)">Write a Python class for a rate limiter with tests</button>
+          <button class="example-btn" onclick="useExample(this)">Research the latest trends in AI for 2025</button>
+          <button class="example-btn" onclick="useExample(this)">Create a technical design doc for a URL shortener</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea id="taskInput" placeholder="Ask anything…" rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendTask()">➤</button>
+      </div>
+      <div class="input-hint">Enter to send · Shift+Enter for new line</div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // ── Config ───────────────────────────────────────────────────────────────
+
+  const AGENT_COLORS = {
+    planner: '#58a6ff', researcher: '#3fb950', writer: '#d29922',
+    developer: '#bc8cff', reviewer: '#f85149', analyst: '#79c0ff',
+    qa_tester: '#e3b341', critic: '#ff7b72', summarizer: '#56d364',
+  };
+
+  marked.setOptions({
+    gfm: true, breaks: true,
+    highlight: (code, lang) => {
+      if (lang && hljs.getLanguage(lang)) {
+        return hljs.highlight(code, { language: lang }).value;
+      }
+      return hljs.highlightAuto(code).value;
+    }
+  });
+
+  // ── State ────────────────────────────────────────────────────────────────
+
+  let isProcessing = false;
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+
+  async function init() {
+    await loadMemories();
+    renderAgentList();
+  }
+
+  function renderAgentList() {
+    const el = document.getElementById('agentList');
+    const agents = Object.entries(AGENT_COLORS);
+    el.innerHTML = agents.map(([name, color]) => `
+      <div class="agent-chip">
+        <div class="agent-dot" style="background:${color}"></div>
+        <span style="text-transform:capitalize">${name.replace('_',' ')}</span>
+      </div>
+    `).join('');
+  }
+
+  // ── Memory ───────────────────────────────────────────────────────────────
+
+  async function loadMemories() {
+    const res = await fetch('/api/memories').catch(() => null);
+    if (!res || !res.ok) return;
+    const { memories } = await res.json();
+    renderMemories(memories);
+  }
+
+  function renderMemories(memories) {
+    const el = document.getElementById('memoryList');
+    const entries = Object.entries(memories);
+    if (entries.length === 0) {
+      el.innerHTML = '<p style="font-size:11px;color:var(--muted);padding:6px 4px">No memories yet.</p>';
+      return;
+    }
+    el.innerHTML = entries.map(([k, v]) => `
+      <div class="memory-item">
+        <div class="memory-key">${escHtml(k)}</div>
+        <div class="memory-val">${escHtml(v)}</div>
+        <button class="del-btn" onclick="deleteMemory('${escHtml(k)}')" title="Delete">✕</button>
+      </div>
+    `).join('');
+  }
+
+  function toggleAddMemory() {
+    const form = document.getElementById('addMemoryForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (form.style.display === 'block') document.getElementById('memKey').focus();
+  }
+
+  async function saveMemory() {
+    const key   = document.getElementById('memKey').value.trim();
+    const value = document.getElementById('memValue').value.trim();
+    if (!key || !value) return;
+    await fetch('/api/memories', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+    document.getElementById('memKey').value = '';
+    document.getElementById('memValue').value = '';
+    toggleAddMemory();
+    loadMemories();
+  }
+
+  async function deleteMemory(key) {
+    await fetch(`/api/memories/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    loadMemories();
+  }
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+
+  async function sendTask() {
+    const input = document.getElementById('taskInput');
+    const task  = input.value.trim();
+    if (!task || isProcessing) return;
+
+    document.getElementById('welcome')?.remove();
+    input.value = '';
+    input.style.height = 'auto';
+    isProcessing = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    addUserMessage(task);
+    const thinkEl = addThinking();
+
+    try {
+      const chatMode = document.getElementById('chatToggle').checked;
+      const res = await fetch('/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, chat_mode: chatMode }),
+      });
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data = await res.json();
+
+      thinkEl.remove();
+      addAIMessage(data.result, data.trace || []);
+      document.getElementById('costPill').textContent = data.cost || '—';
+
+      // Refresh memories (AI might have saved new ones)
+      loadMemories();
+    } catch (err) {
+      thinkEl.remove();
+      addErrorMessage(err.message);
+    } finally {
+      isProcessing = false;
+      document.getElementById('sendBtn').disabled = false;
+      input.focus();
+    }
+  }
+
+  function addUserMessage(text) {
+    const el = document.createElement('div');
+    el.className = 'msg user';
+    el.innerHTML = `
+      <div class="msg-header" style="justify-content:flex-end">
+        <span>You</span>
+        <div class="avatar user-av">U</div>
+      </div>
+      <div class="msg-body">${escHtml(text)}</div>
+    `;
+    appendMsg(el);
+  }
+
+  function addAIMessage(markdown, trace) {
+    const el = document.createElement('div');
+    el.className = 'msg ai';
+
+    const traceHtml = trace.length > 0 ? `
+      <div class="trace-toggle" onclick="toggleTrace(this)">
+        ▶ Agent trace (${trace.length} call${trace.length > 1 ? 's' : ''})
+      </div>
+      <div class="trace-list">
+        ${trace.map(t => `
+          <div class="trace-item">
+            <span class="trace-agent">${t.agent}</span>
+            <span class="trace-task">${escHtml(t.task || '')}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+
+    el.innerHTML = `
+      <div class="msg-header">
+        <div class="avatar ai-av">⚡</div>
+        <span>AI Team</span>
+      </div>
+      <div class="msg-body">${marked.parse(markdown)}</div>
+      ${traceHtml}
+    `;
+
+    // Apply syntax highlighting
+    el.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+    appendMsg(el);
+  }
+
+  function addErrorMessage(text) {
+    const el = document.createElement('div');
+    el.className = 'msg error-msg';
+    el.innerHTML = `
+      <div class="msg-header">
+        <div class="avatar ai-av">⚡</div>
+        <span>Error</span>
+      </div>
+      <div class="msg-body">⚠ ${escHtml(text)}</div>
+    `;
+    appendMsg(el);
+  }
+
+  function addThinking() {
+    const el = document.createElement('div');
+    el.className = 'msg ai';
+    el.innerHTML = `
+      <div class="msg-header">
+        <div class="avatar ai-av">⚡</div>
+        <span>AI Team</span>
+      </div>
+      <div class="msg-body">
+        <div class="thinking-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <span style="color:var(--muted);font-size:12px;margin-left:6px">Working…</span>
+      </div>
+    `;
+    appendMsg(el);
+    return el;
+  }
+
+  function appendMsg(el) {
+    const msgs = document.getElementById('messages');
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function toggleTrace(el) {
+    const list = el.nextElementSibling;
+    const open = list.classList.toggle('open');
+    el.textContent = el.textContent.replace(open ? '▶' : '▼', open ? '▼' : '▶');
+  }
+
+  // ── Controls ─────────────────────────────────────────────────────────────
+
+  function useExample(btn) {
+    const input = document.getElementById('taskInput');
+    input.value = btn.textContent.trim();
+    autoResize(input);
+    input.focus();
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendTask();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+  }
+
+  async function clearHistory() {
+    if (!confirm('Clear conversation history?')) return;
+    await fetch('/api/history', { method: 'DELETE' });
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('costPill').textContent = '—';
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+
+  init();
+</script>
+</body>
+</html>

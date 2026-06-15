@@ -12,16 +12,7 @@ from .critic import CriticAgent
 from .summarizer import SummarizerAgent
 
 __all__ = [
-    "BaseAgent",
-    "ToolAgent",
-    "Orchestrator",
-    "PlannerAgent",
-    "ResearcherAgent",
-    "WriterAgent",
-    "DeveloperAgent",
-    "ReviewerAgent",
-    "AnalystAgent",
-    "QATesterAgent",
-    "CriticAgent",
-    "SummarizerAgent",
+    "BaseAgent", "ToolAgent", "Orchestrator",
+    "PlannerAgent", "ResearcherAgent", "WriterAgent", "DeveloperAgent",
+    "ReviewerAgent", "AnalystAgent", "QATesterAgent", "CriticAgent", "SummarizerAgent",
 ]

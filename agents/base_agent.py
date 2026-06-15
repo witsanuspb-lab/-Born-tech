@@ -24,7 +24,13 @@ class BaseAgent:
         self.client = anthropic.Anthropic()
 
     def _log(self, message: str) -> None:
-        if self.verbose:
+        if not self.verbose:
+            return
+        try:
+            from utils.display import console, AGENT_STYLES
+            style = AGENT_STYLES.get(self.name, "dim")
+            console.print(f"  [{self.name}] {message}", style=style)
+        except ImportError:
             print(f"  [{self.name}] {message}")
 
     def run(self, task: str, context: Optional[str] = None, retries: int = 3) -> str:
@@ -53,7 +59,7 @@ class BaseAgent:
 
             except anthropic.RateLimitError:
                 wait = 2 ** attempt
-                self._log(f"Rate limit hit — retrying in {wait}s...")
+                self._log(f"Rate limit — retrying in {wait}s...")
                 time.sleep(wait)
             except anthropic.APIStatusError as e:
                 if attempt < retries - 1:

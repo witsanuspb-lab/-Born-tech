@@ -127,6 +127,7 @@ class TestMemoryStore:
         assert "No memory" in store.recall("key")
 
     def test_persistence(self, tmp_path):
+        from memory.store import MemoryStore
         path = str(tmp_path / "mem.json")
         s1 = MemoryStore(path)
         s1.save("persisted", "yes")

@@ -71,7 +71,12 @@ async def run_task(req: TaskRequest):
     reset_tracker()
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(_executor, _team.run, req.task)
+    try:
+        result = await loop.run_in_executor(_executor, _team.run, req.task)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if _team.last_error:
+        raise HTTPException(status_code=500, detail=_team.last_error)
 
     entry = {
         "task": req.task,

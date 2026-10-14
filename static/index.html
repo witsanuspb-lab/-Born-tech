@@ -423,7 +423,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, chat_mode: chatMode }),
       });
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(`Server error ${res.status}: ${body.detail || res.statusText}`);
+      }
       const data = await res.json();
 
       thinkEl.remove();

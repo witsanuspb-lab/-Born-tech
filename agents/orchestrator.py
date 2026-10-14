@@ -150,6 +150,7 @@ class Orchestrator:
         self.client = anthropic.Anthropic()
         self._history: list[dict] = []
         self._trace: list[dict] = []
+        self.last_error: str | None = None
 
     def _log(self, message: str) -> None:
         if not self.verbose:
@@ -235,6 +236,7 @@ class Orchestrator:
         from utils.cost import get_tracker
 
         self._trace = []
+        self.last_error = None
         self._log(f"Task: {user_task[:120]}...")
 
         messages = (
@@ -263,8 +265,10 @@ class Orchestrator:
                 self._log(f"Rate limit — retrying in {wait}s...")
                 time.sleep(wait)
                 if attempt == self.max_retries - 1:
-                    return "Error: rate limit exhausted after retries."
+                    self.last_error = "rate limit exhausted after retries."
+                    return f"Error: {self.last_error}"
             except Exception as e:
+                self.last_error = str(e)
                 return f"Error: {e}"
 
         while True:
